@@ -176,3 +176,30 @@ class Keithley:
         # The 6482 returns a string like '+1.2345E-09A, +0.0000E+00, ...'
         # We split by comma and convert the first element to float
         return float(raw_response.split(',')[0].replace('A', ''))
+
+    def setup_dual_channel(self) -> None:
+        """Configures the instrument to return data for both channels."""
+        # Set data elements: Current, Timestamp, and Status
+        self.send_command('FORM:ELEM CURR, TIME, STAT')
+        # Turn off Zero Check for both (Note: 6482 ZCH is often global or per-channel)
+        self.send_command('SYST:ZCH OFF')
+
+    def get_dual_readings(self) -> dict[str, float]:
+        """
+        Triggers a reading and returns a dictionary with Ch1 and Ch2 values.
+        The 6482 returns: [Ch1_Curr, Ch1_Time, Ch1_Stat, Ch2_Curr, Ch2_Time, Ch2_Stat]
+        """
+        raw_data = self.send_query('READ?')
+
+        # Split the comma-separated string
+        parts = raw_data.split(',')
+
+        # Safety check: Ensure we have enough parts for two channels
+        if len(parts) < 6:
+            raise ValueError(f'Unexpected response format: {raw_data}')
+
+        # Parse and clean strings (removing 'A' suffix if present)
+        ch1_value = float(parts[0].replace('A', ''))
+        ch2_value = float(parts[3].replace('A', ''))
+
+        return {'ch1': ch1_value, 'ch2': ch2_value, 'timestamp': float(parts[1])}
