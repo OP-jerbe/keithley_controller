@@ -169,7 +169,7 @@ class Keithley:
         self.send_command(f'SYST:ZCH {val}')
 
     def get_current(self) -> float:
-        """Disables zero check and returns the current reading."""
+        """Disables zero check and returns the current reading of the active channel."""
         # Ensure Zero Check is off before reading
         self.set_zero_check(False)
         raw_response = self.send_query('READ?')
