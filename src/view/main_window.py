@@ -106,3 +106,13 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.tabs)
         self._create_keithley_tab()
+
+    def update_current_reading_labels(self, currents: dict[str, float]) -> None:
+        try:
+            screen_current = str(currents['ch1'])
+            cup_current = str(currents['ch2'])
+            self.ch1_current_label.setText(screen_current)
+            self.ch2_current_label.setText(cup_current)
+        except:
+            self.ch1_current_label.setText('ERROR')
+            self.ch2_current_label.setText('ERROR')
