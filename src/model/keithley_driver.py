@@ -1,6 +1,6 @@
 import atexit
 from threading import Lock
-from typing import Optional
+from typing import Literal, Optional
 
 import serial
 
@@ -146,11 +146,87 @@ class Keithley:
 
         return self._ser.read_until(term_char.encode(encoding)).decode(encoding).strip()
 
+    ###################################################################################
+    ################################ SCPI Commmands ###################################
+    ###################################################################################
+
     def _get_device_data(self) -> tuple:
-        response = self.send_query('*IDN?').split(',')
+        """
+        GETTER: Reads the device model and serial number
+        """
+        command = '*IDN?'
+        response = self.send_query(command).split(',')
         model = response[1].replace('MODEL ', '')
         sn = response[2]
         return (model, sn)
+
+    def remote_enable(self) -> None:
+        """
+        Put the device into remote operation when next addressed to listen.
+
+        You must address the instrument to listen after setting REN true before it goes
+        into the remote operation.
+
+        The Model 6482 must be in remote mode to use the following commands to
+        trigger and acquire readings:
+
+            ":INITiate and then :FETCh?"
+            ":READ?"
+            ":MEASure?"
+        """
+        command = 'REN'
+        self.send_command(command)
+
+    def reset_event_registers(self) -> None:
+        """
+        Clear all messages from Error Queue and reset all bits of the following event registers to 0:
+            Standard Event Register
+            Operation Event Register
+            Measurement Event Register
+            Questionable Event Register
+
+        Note 1:
+            The Standard Event Enable Register is not reset by STATus:PRESet or *CLS. Send the *ESE command
+            with a zero (0) parameter value to reset all bits of that enable register to 0. See “Status byte and service
+            request commands,” page Section 13-8.
+
+        Note 2:
+            STATus:PRESet has no effect on the error queue.
+        """
+        command = '*CLS'
+        self.send_command(command)
+
+    def reset_enable_registers(self) -> None:
+        """
+        Reset all bits of the following enable registers to 0:
+            Operation Event Enable Register
+            Measurement Event Enable Register
+            Questionable Event Enable Register
+
+        Note:
+            The Standard Event Enable Register is not reset by STATus:PRESet or *CLS. Send the *ESE command
+            with a zero (0) parameter value to reset all bits of that enable register to 0. See “Status byte and service
+            request commands,” page Section 13-8.
+        """
+        command = 'STAT:PRES'
+        self.send_command(command)
+
+    def clear_error_queue(self, which: Literal[1, 2] = 2) -> None:
+        """
+        Clear all messages from the Error Queue
+
+        Note:
+            Use either of the two clear commands to clear the error queue.
+        """
+        if which == 1:
+            command = 'STAT:QUE:CLE'
+        else:
+            command = 'SYST:ERR:CLE'
+        self.send_command(command)
+
+    ###################################################################################
+    ############################## Gemini Generated ###################################
+    ###################################################################################
 
     def set_range(self, channel: int, range_val: float) -> None:
         """Sets a fixed current range. Use 0 for Auto-range."""
