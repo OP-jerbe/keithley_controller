@@ -6,9 +6,6 @@ import serial
 
 import src.helpers.helpers as h
 
-# from src.model.keithley_driver import Keithley
-# k = Keithley
-
 
 class Keithley:
     ENCODING = 'utf-8'
@@ -36,7 +33,7 @@ class Keithley:
         Reads the comport from the ini file.
         """
         config_data = h.load_ini()
-        return config_data.get('COMPORT', 'port')
+        return config_data.get('COMPORT', 'keithley')
 
     def open_conn(self, port: str, baudrate: int = 9600, timeout: float = 1.0) -> None:
         """
@@ -316,6 +313,14 @@ class Keithley:
         else:
             command = f'SOUR{channel}:VOLT:RANG {voltage}'
         self.send_command(command)
+
+    def get_voltage(self, channel: Literal[1, 2]) -> float:
+        command = f'SOUR{channel}:VOLT?'
+        response = self.send_query(command)
+        voltage = float(response)
+        if voltage.is_integer():
+            return int(voltage)
+        return voltage
 
     ###################################################################################
     ############################## Gemini Generated ###################################
