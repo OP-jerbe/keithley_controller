@@ -160,9 +160,24 @@ class Keithley:
         sn = response[2]
         return (model, sn)
 
+    def local_enable(self) -> None:
+        """
+        Take the Model 6482 out of remote
+
+        Normally, during RS-232 communications, front-panel keys are operational.
+        However, the user may wish to lock out front-panel keys during RS-232
+        communications. See RWLock.
+
+        This action command is used to remove the Model 6482 from the remote state
+        and enables the operation of front-panel keys in a manner similar to the GPIB GTL
+        command.
+        """
+        command = 'SYST:LOC'
+        self.send_command(command)
+
     def remote_enable(self) -> None:
         """
-        Put the device into remote operation when next addressed to listen.
+        Place the Model 6482 in remote.
 
         You must address the instrument to listen after setting REN true before it goes
         into the remote operation.
@@ -174,10 +189,10 @@ class Keithley:
             ":READ?"
             ":MEASure?"
         """
-        command = 'REN'
+        command = 'SYST:REM'
         self.send_command(command)
 
-    def reset_event_registers(self) -> None:
+    def reset_event_reg(self) -> None:
         """
         Clear all messages from Error Queue and reset all bits of the following event registers to 0:
             Standard Event Register
@@ -196,7 +211,7 @@ class Keithley:
         command = '*CLS'
         self.send_command(command)
 
-    def reset_enable_registers(self) -> None:
+    def reset_enable_reg(self) -> None:
         """
         Reset all bits of the following enable registers to 0:
             Operation Event Enable Register
@@ -224,11 +239,89 @@ class Keithley:
             command = 'SYST:ERR:CLE'
         self.send_command(command)
 
+    def format_reg(self, name: Literal['ASC', 'HEX', 'OCT', 'BIN']) -> None:
+        """
+        Select data format for reading status registers. The device's default is ASCII:
+
+        Note:
+            For nondecimal formats, one of the following headers will accompany the returned value to
+            indicate which format is selected:
+                #B = Header for binary values
+                #H = Header for hexadecimal values
+                #Q = Header for octal values
+        Args:
+            name (str): The data format where:
+                ASC=ASCII Decimal, (default)
+                HEX=Hexadecimal,
+                OCT= Octal format,
+                BIN=Binary format,
+        """
+        command = f'FORM:SREG {name}'
+        self.send_command(command)
+
+    def get_status_byte_reg(self) -> str:
+        """
+        GETTER: Read the status byte register
+        """
+        command = '*STB?'
+        response = self.send_query(command)
+        return response
+
+    def get_service_request_enable_reg(self) -> str:
+        """
+        GETTER: Read the service request enable register.
+        """
+        command = '*SRE?'
+        response = self.send_query(command)
+        return response
+
+    def enable_output(self, bit: Literal[0, 1], channel: Literal[0, 1, 2] = 0) -> None:
+        """
+        Turn on or off the channel 2 output
+
+        Args:
+            channel (int): the output to command where:
+                1=Output 1
+                2=Output 2
+            bit (int): the output state where:
+                0=Off
+                1=On
+        """
+        if channel == 0:
+            command = f'OUTP1:STAT {bit}; :OUTP2:STAT {bit}'
+        else:
+            command = f'OUTP{channel}:STAT {bit}'
+        self.send_command(command)
+
+    def set_voltage(self, voltage: float, channel: Literal[0, 1, 2] = 0) -> None:
+        """
+        Set the voltage of a channel's output.
+
+        Args:
+            channel (int): the output to command where
+                1=Output 1
+                2=Output 2
+            voltage (float): the voltage level (-30 to 30)
+        """
+        if channel == 0:
+            command = f'SOUR1:VOLT {voltage}; :SOUR2:VOLT {voltage}'
+        else:
+            command = f'SOUR{channel}:VOLT {voltage}'
+
+        self.send_command(command)
+
+    def set_voltage_range(self, voltage: float, channel: Literal[0, 1, 2] = 0) -> None:
+        if channel == 0:
+            command = f'SOUR1:VOLT:RANG {voltage}; :SOUR2:VOLT:RANG {voltage}'
+        else:
+            command = f'SOUR{channel}:VOLT:RANG {voltage}'
+        self.send_command(command)
+
     ###################################################################################
     ############################## Gemini Generated ###################################
     ###################################################################################
 
-    def set_range(self, channel: int, range_val: float) -> None:
+    def set_curr_range(self, channel: int, range_val: float) -> None:
         """Sets a fixed current range. Use 0 for Auto-range."""
         if range_val == 0:
             self.send_command(f'SENS{channel}:CURR:RANG:AUTO ON')
@@ -260,7 +353,7 @@ class Keithley:
         # Turn off Zero Check for both (Note: 6482 ZCH is often global or per-channel)
         self.send_command('SYST:ZCH OFF')
 
-    def get_dual_readings(self) -> dict[str, float]:
+    def get_curr_readings(self) -> dict[str, float]:
         """
         Triggers a reading and returns a dictionary with Ch1 and Ch2 values.
         The 6482 returns: [Ch1_Curr, Ch1_Time, Ch1_Stat, Ch2_Curr, Ch2_Time, Ch2_Stat]
@@ -271,11 +364,50 @@ class Keithley:
         parts = raw_data.split(',')
 
         # Safety check: Ensure we have enough parts for two channels
-        if len(parts) < 6:
+        if len(parts) < 2:
             raise ValueError(f'Unexpected response format: {raw_data}')
 
         # Parse and clean strings (removing 'A' suffix if present)
         ch1_value = float(parts[0].replace('A', ''))
-        ch2_value = float(parts[3].replace('A', ''))
+        ch2_value = float(parts[1].replace('A', ''))
 
-        return {'ch1': ch1_value, 'ch2': ch2_value, 'timestamp': float(parts[1])}
+        return {'ch1': ch1_value, 'ch2': ch2_value}
+
+
+if __name__ == '__main__':
+    import time
+
+    # connect to the Keithley picoammeter
+    k = Keithley()
+
+    # clear all the registers
+    k.reset_event_reg()
+
+    # enable remote control
+    k.remote_enable()
+
+    # get the model and serial number of the device
+    print(f'Keithley Model = {k.model}')
+    print(f'Serial Number = {k.sn}')
+
+    # set the voltage range of both channels to 30 V
+    k.set_voltage_range(30)
+
+    # set the voltage of both channels to 30 V
+    k.set_voltage(30)
+
+    # enable the output of the voltage
+    k.enable_output(1)
+    time.sleep(2)
+
+    # take a current reading on both channels
+    print(k.get_curr_readings())
+
+    # set the voltage to 0 V
+    k.set_voltage(voltage=0)
+
+    # disable the output voltage
+    k.enable_output(0)
+
+    # disable the remote control
+    k.local_enable()
